@@ -31,7 +31,7 @@ function accountsList() {
   // In live mode, account display names must come from your own config/DB —
   // the Graph API account object also exposes a `name` field via
   // /act_{id}?fields=name if you'd rather pull it live.
-  return ACCOUNT_IDS.map((id) => ({ id, name: `Ad Account ${id}`, currency: "USD" }));
+  return ACCOUNT_IDS.map((id) => ({ id, name: `Ad Account ${id}`, currency: "INR" }));
 }
 
 app.get("/api/health", (req, res) => {
@@ -42,10 +42,11 @@ app.get("/api/accounts", (req, res) => {
   res.json(accountsList());
 });
 
-// Initial snapshot for one or more accounts: /api/snapshot?ids=1001,1002
+// Initial snapshot for one or more accounts: /api/snapshot?ids=1001,1002&days=7
 app.get("/api/snapshot", async (req, res) => {
   const ids = (req.query.ids || "").split(",").map((s) => s.trim()).filter(Boolean);
   const wanted = ids.length ? ids : accountsList().map((a) => a.id);
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
 
   try {
     const results = [];
@@ -54,12 +55,10 @@ app.get("/api/snapshot", async (req, res) => {
         const d = getDemoSnapshot(id);
         if (d) results.push({ account: d.account, campaigns: d.campaigns });
       } else {
-        const cached = cache.get(id);
-        if (cached) { results.push(cached); continue; }
-        const since = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+        const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
         const until = new Date().toISOString().slice(0, 10);
         const snap = await fetchAccountSnapshot(id, { since, until });
-        const withAccount = { account: { id, name: `Ad Account ${id}`, currency: "USD" }, ...snap };
+        const withAccount = { account: { id, name: `Ad Account ${id}`, currency: "INR" }, ...snap };
         cache.set(id, withAccount);
         results.push(withAccount);
       }
@@ -145,7 +144,7 @@ if (DEMO_MODE) {
     for (const id of ACCOUNT_IDS) {
       try {
         const snap = await fetchAccountSnapshot(id, { since, until });
-        const withAccount = { account: { id, name: `Ad Account ${id}`, currency: "USD" }, ...snap };
+        const withAccount = { account: { id, name: `Ad Account ${id}`, currency: "INR" }, ...snap };
         cache.set(id, withAccount);
       } catch (err) {
         console.error(`poll failed for act_${id}`, err?.response?.data || err.message);

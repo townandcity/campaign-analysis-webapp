@@ -14,8 +14,8 @@ const COLORS = {
   coral: "#FF6B5B", blue: "#5B8DEF",
 };
 
-const fmtMoney = (n, currency = "USD") =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(n || 0);
+const fmtMoney = (n, currency = "INR") =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 2 }).format(n || 0);
 const fmtNum = (n) => {
   n = n || 0;
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
@@ -249,7 +249,7 @@ function CampaignTable({ campaigns, currency, expanded, setExpanded }) {
 
 /* ---------------------------------------------------------------- App ---------------------------------------------------------------- */
 export default function App() {
-  const { accounts, snapshots, leads, connected, mode } = useLiveData();
+  const { accounts, snapshots, leads, connected, mode, days, setDateRange } = useLiveData();
   const [selected, setSelected] = useState([]);
   const [acctMenuOpen, setAcctMenuOpen] = useState(false);
   const [expanded, setExpanded] = useState(null);
@@ -260,11 +260,11 @@ export default function App() {
 
   const combined = useMemo(() => {
     const campaigns = [];
-    let currency = "USD";
+    // INR is used for every account in this deployment — see fmtMoney default.
+    let currency = "INR";
     activeIds.forEach((id) => {
       const snap = snapshots[id];
       if (!snap) return;
-      currency = snap.account.currency || currency;
       campaigns.push(...(snap.campaigns || []));
     });
     return { campaigns, currency };
@@ -290,78 +290,131 @@ export default function App() {
     return ads.filter((a) => (a.headline || "").toLowerCase().includes(q) || (a.name || "").toLowerCase().includes(q));
   }, [combined, search]);
 
-  const toggleAccount = (id) => setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleAccount = (id) => {
+    const next = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+    setSelected(next);
+  };
+
+  const jumpTo = (sectionId) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100%", color: COLORS.text, fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif", padding: "20px 22px 40px" }}>
+    <div style={{ background: COLORS.bg, minHeight: "100%", color: COLORS.text, fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-thumb { background: ${COLORS.border}; border-radius: 4px; }
+        html { scroll-behavior: smooth; }
       `}</style>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: 99, background: connected ? COLORS.teal : COLORS.coral, boxShadow: `0 0 8px ${connected ? COLORS.teal : COLORS.coral}` }} />
-            <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 600, margin: 0 }}>Campaign Analysis — Live</h1>
-          </div>
-          <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
-            {connected ? "Connected" : "Reconnecting…"} · {mode === "demo" ? "Demo mode (simulated live data)" : "Live mode (Meta Graph API)"}
-          </div>
-        </div>
-
-        <div style={{ position: "relative" }}>
-          <button onClick={() => setAcctMenuOpen((v) => !v)} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.text, padding: "8px 12px", fontSize: 12.5, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-            {activeIds.length} Ad Account{activeIds.length !== 1 ? "s" : ""} <ChevronDown size={14} />
-          </button>
-          {acctMenuOpen && (
-            <div style={{ position: "absolute", top: "110%", right: 0, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 8, zIndex: 20, minWidth: 240 }}>
-              {accounts.map((a) => (
-                <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 6, cursor: "pointer", fontSize: 12.5 }}>
-                  <input type="checkbox" checked={activeIds.includes(a.id)} onChange={() => toggleAccount(a.id)} />
-                  <span style={{ flex: 1 }}>{a.name}</span>
-                  <span style={{ color: COLORS.muted, fontSize: 10.5 }}>{a.currency}</span>
-                </label>
-              ))}
+      {/* TOP BAR — sticky: logo, title, quick jump nav, date range, account switcher */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 30, background: "rgba(11,15,20,0.92)", backdropFilter: "blur(6px)",
+        borderBottom: `1px solid ${COLORS.border}`, padding: "12px 22px",
+      }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* TNCD logo (white variant) — swap frontend/public/tncd-logo.png to update */}
+            <img
+              src="/tncd-logo.png"
+              alt="TNCD"
+              style={{ height: 30, width: "auto", objectFit: "contain" }}
+              onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.nextSibling.style.display = "flex"; }}
+            />
+            <div style={{
+              display: "none", height: 30, width: 30, borderRadius: 6, background: COLORS.blue, color: "#fff",
+              alignItems: "center", justifyContent: "center", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 13,
+            }}>TC</div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 7, height: 7, borderRadius: 99, background: connected ? COLORS.teal : COLORS.coral, boxShadow: `0 0 8px ${connected ? COLORS.teal : COLORS.coral}` }} />
+                <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 17, fontWeight: 600, margin: 0 }}>Campaign Analysis — Live</h1>
+              </div>
+              <div style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                {connected ? "Connected" : "Reconnecting…"} · {mode === "demo" ? "Demo mode" : "Live · Meta Graph API"}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <KpiCard icon={DollarSign} label="Total Spend" value={fmtMoney(totals.spend, combined.currency)} />
-        <KpiCard icon={Eye} label="Impressions" value={fmtNum(totals.impressions)} sub={`Reach ${fmtNum(totals.reach)}`} />
-        <KpiCard icon={MousePointerClick} label="Clicks / CTR" value={fmtNum(totals.clicks)} sub={`CTR ${fmtPct(totals.ctr)}`} />
-        <KpiCard icon={Target} label="CPC / CPM" value={fmtMoney(totals.cpc, combined.currency)} sub={`CPM ${fmtMoney(totals.cpm, combined.currency)}`} />
-        <KpiCard icon={Users} label="Leads" value={fmtNum(totals.leads)} />
-        <KpiCard icon={Target} label="Cost Per Lead" value={fmtMoney(totals.cpl, combined.currency)} />
-      </div>
+          {/* Quick jump nav */}
+          <div style={{ display: "flex", gap: 6 }}>
+            {[["overview-section", "Overview"], ["campaigns-section", "Campaigns"], ["creatives-section", "Ad Creatives"]].map(([id, label]) => (
+              <button key={id} onClick={() => jumpTo(id)} style={{
+                background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.text,
+                padding: "7px 12px", fontSize: 12, cursor: "pointer",
+              }}>{label}</button>
+            ))}
+          </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-        <CplPulse campaigns={combined.campaigns} currency={combined.currency} />
-        <LiveLeadsFeed leads={leads} />
-      </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {/* Date range filter */}
+            <select value={days} onChange={(e) => setDateRange(Number(e.target.value), activeIds)} style={{
+              background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.text,
+              padding: "7px 10px", fontSize: 12, cursor: "pointer",
+            }}>
+              <option value={7}>Last 7 days</option>
+              <option value={14}>Last 14 days</option>
+              <option value={30}>Last 30 days</option>
+            </select>
 
-      <div style={{ marginBottom: 16 }}>
-        <CampaignTable campaigns={combined.campaigns} currency={combined.currency} expanded={expanded} setExpanded={setExpanded} />
-      </div>
-
-      <div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Ad Creatives</div>
-          <div style={{ position: "relative" }}>
-            <Search size={13} style={{ position: "absolute", left: 9, top: 8, color: COLORS.muted }} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search creatives..." style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.text, padding: "6px 10px 6px 28px", fontSize: 12, width: 200 }} />
+            {/* Account switcher */}
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setAcctMenuOpen((v) => !v)} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.text, padding: "7px 12px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                {activeIds.length} Ad Account{activeIds.length !== 1 ? "s" : ""} <ChevronDown size={14} />
+              </button>
+              {acctMenuOpen && (
+                <div style={{ position: "absolute", top: "110%", right: 0, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 8, zIndex: 20, minWidth: 240 }}>
+                  {accounts.map((a) => (
+                    <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 6, cursor: "pointer", fontSize: 12.5 }}>
+                      <input type="checkbox" checked={activeIds.includes(a.id)} onChange={() => toggleAccount(a.id)} />
+                      <span style={{ flex: 1 }}>{a.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
-          {allAds.map((ad) => <CreativeCard key={ad.id} ad={ad} currency={combined.currency} onOpen={setActiveAd} />)}
-        </div>
       </div>
 
-      <CreativeModal ad={activeAd} currency={combined.currency} onClose={() => setActiveAd(null)} />
+      <div style={{ padding: "20px 22px 40px" }}>
+        <div id="overview-section">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <KpiCard icon={DollarSign} label="Total Spend" value={fmtMoney(totals.spend, combined.currency)} />
+            <KpiCard icon={Eye} label="Impressions" value={fmtNum(totals.impressions)} sub={`Reach ${fmtNum(totals.reach)}`} />
+            <KpiCard icon={MousePointerClick} label="Clicks / CTR" value={fmtNum(totals.clicks)} sub={`CTR ${fmtPct(totals.ctr)}`} />
+            <KpiCard icon={Target} label="CPC / CPM" value={fmtMoney(totals.cpc, combined.currency)} sub={`CPM ${fmtMoney(totals.cpm, combined.currency)}`} />
+            <KpiCard icon={Users} label="Leads" value={fmtNum(totals.leads)} />
+            <KpiCard icon={Target} label="Cost Per Lead" value={fmtMoney(totals.cpl, combined.currency)} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+            <CplPulse campaigns={combined.campaigns} currency={combined.currency} />
+            <LiveLeadsFeed leads={leads} />
+          </div>
+        </div>
+
+        <div id="campaigns-section" style={{ marginBottom: 16, scrollMarginTop: 90 }}>
+          <CampaignTable campaigns={combined.campaigns} currency={combined.currency} expanded={expanded} setExpanded={setExpanded} />
+        </div>
+
+        <div id="creatives-section" style={{ scrollMarginTop: 90 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Ad Creatives</div>
+            <div style={{ position: "relative" }}>
+              <Search size={13} style={{ position: "absolute", left: 9, top: 8, color: COLORS.muted }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search creatives..." style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.text, padding: "6px 10px 6px 28px", fontSize: 12, width: 200 }} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
+            {allAds.map((ad) => <CreativeCard key={ad.id} ad={ad} currency={combined.currency} onOpen={setActiveAd} />)}
+          </div>
+        </div>
+
+        <CreativeModal ad={activeAd} currency={combined.currency} onClose={() => setActiveAd(null)} />
+      </div>
     </div>
   );
 }
