@@ -20,7 +20,11 @@ export async function fetchCampaigns(accountId) {
   const { data } = await client().get(`/act_${accountId}/campaigns`, {
     params: {
       fields: "id,name,objective,status,daily_budget,lifetime_budget",
-      limit: 200,
+      // Large accounts (hundreds of campaigns) will hit Meta's "reduce the
+      // amount of data" error if we ask for everything at once. Limiting to
+      // active campaigns keeps the payload small and the dashboard relevant.
+      effective_status: JSON.stringify(["ACTIVE"]),
+      limit: 100,
     },
   });
   return data.data || [];
@@ -36,7 +40,8 @@ export async function fetchAds(accountId) {
       fields:
         "id,name,status,adset_id,campaign_id," +
         "creative{id,title,body,thumbnail_url,image_url,object_type,video_id}",
-      limit: 500,
+      effective_status: JSON.stringify(["ACTIVE"]),
+      limit: 100,
     },
   });
   return data.data || [];
@@ -62,7 +67,7 @@ export async function fetchInsights(accountId, { since, until, level = "ad" } = 
       level,
       time_range: JSON.stringify({ since, until }),
       fields: "ad_id,campaign_id,spend,impressions,reach,clicks,ctr,cpc,cpm,frequency,actions",
-      limit: 500,
+      limit: 100,
     },
   });
 

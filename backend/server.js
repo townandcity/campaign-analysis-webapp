@@ -56,7 +56,7 @@ app.get("/api/snapshot", async (req, res) => {
       } else {
         const cached = cache.get(id);
         if (cached) { results.push(cached); continue; }
-        const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+        const since = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
         const until = new Date().toISOString().slice(0, 10);
         const snap = await fetchAccountSnapshot(id, { since, until });
         const withAccount = { account: { id, name: `Ad Account ${id}`, currency: "USD" }, ...snap };
@@ -140,7 +140,7 @@ if (DEMO_MODE) {
     console.warn("DEMO_MODE=false but META_ACCESS_TOKEN or META_AD_ACCOUNT_IDS is missing. Set both in .env.");
   }
   const poll = async () => {
-    const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const since = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
     const until = new Date().toISOString().slice(0, 10);
     for (const id of ACCOUNT_IDS) {
       try {
